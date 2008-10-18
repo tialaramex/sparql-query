@@ -73,9 +73,11 @@ int main(int argc, char *argv[])
 
     if (help || !ep) {
         fprintf(stderr, "%s revision %s\n", argv[0], GIT_REV);
-        fprintf(stderr, "Usage: %s [-v] [-f MIME type] <url>\n", argv[0]);
-        fprintf(stderr, " url should be a SPARQL HTTP endpoint, remember to use"
-                        " shell quoting if necessary\n");
+        fprintf(stderr, "Usage: %s [-v] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
+        fprintf(stderr, " %s http://example.net/sparql 'SELECT * WHERE { ?s ?p ?o } LIMIT 10'\n", argv[0]);
+        fprintf(stderr, " <ep> is a SPARQL HTTP endpoint\n");
+        fprintf(stderr, " <query> is a SPARQL query to execute immediately in non-interactive mode\n");
+        fprintf(stderr, "remember to use shell quoting if necessary\n");
         return 1;
     }
 

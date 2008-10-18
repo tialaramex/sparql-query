@@ -1,0 +1,20 @@
+sparql-query is a command-line tool for accessing SPARQL endpoints over HTTP
+
+It has been intentionally designed to 'feel' similar to tools for
+interrogating SQL databases. It supports readline so that you can more easily
+recall and edit previous queries, even across sessions. It can be used non-
+interactively for example from a shell script. It doesn't have difficult or
+hard to find dependencies so it should build fairly easily on typical Unix-like
+systems.
+
+You can find a list of some existing public SPARQL endpoints on the ESW wiki
+http://esw.w3.org/topic/SparqlEndpoints
+
+For example, to access the DBpedia endpoint, which contains knowledge
+gleaned from Wikipedia, you would type:
+
+sparql-query http://dbpedia.org/sparql
+
+sparql-query was developed by Nick Lamb and Steve Harris at Garlik. You are
+welcome to modify, copy and redistribute this software under the terms of the
+GNU GPL which is included in the file COPYING.
