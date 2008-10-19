@@ -1,5 +1,5 @@
 BINS = sparql-query
-REQUIRES = glib-2.0 libcurl
+REQUIRES = glib-2.0 libcurl libxml-2.0
 gitrev := $(shell git-rev-parse HEAD)
 
 # PROFILE = -pg
@@ -15,5 +15,5 @@ install:
 clean:
 	rm -f *.o $(BINS)
 
-sparql-query: sparql-query.o
+sparql-query: sparql-query.o result-parse.o
 	$(CC) $(LDFLAGS) -o $@ $^

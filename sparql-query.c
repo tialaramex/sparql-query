@@ -31,18 +31,33 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-static int execute_query(CURL *curl, const char *ep, const char *query);
-static CURL *sparql_curl_init(const char *format, int verbose);
+extern int sr_parse(const char *filename);
 
-static void interactive(const char *ep, const char *format, int verbose);
+typedef struct query_bits_struct {
+    char *format;
+    char *ep;
+    CURL *curl;
+    FILE *file;
+    char filename[20];
+    int verbose;
+    int xml_filter;
+} query_bits;
+
+/* must not be longer than 20 bytes, see above */
+static const char *tmp_filename = "/tmp/sparql-XXXXXXX";
+
+static int execute_query(const char *query, query_bits *bits);
+static void sparql_curl_init(query_bits *bits);
+
+static void interactive(query_bits *bits);
 
 int main(int argc, char *argv[])
 {
-    char *format = "text/plain";
+    query_bits bits = { .format = "text/plain", .ep = NULL, .verbose = 0, .xml_filter = 0 };
+
     static char *optstring = "f:v";
-    char *ep = NULL, *query = NULL;
+    char *query = NULL;
     int help = 0;
-    int verbose = 0;
     int c, opt_index = 0;
 
     static struct option long_options[] = {
@@ -53,17 +68,17 @@ int main(int argc, char *argv[])
 
     while ((c = getopt_long (argc, argv, optstring, long_options, &opt_index)) != -1) {
         if (c == 'f') {
-            format = optarg;
+            bits.format = optarg;
         } else if (c == 'v') {
-            verbose++;
+            bits.verbose++;
         } else {
             help = 1;
         }
     }
 
     for (int k = optind; k < argc; ++k) {
-        if (!ep) {
-            ep = argv[k];
+        if (!bits.ep) {
+            bits.ep = argv[k];
         } else if (!query) {
             query = argv[k];
         } else {
@@ -71,7 +86,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (help || !ep) {
+    if (help || !bits.ep) {
         fprintf(stderr, "%s revision %s\n", argv[0], GIT_REV);
         fprintf(stderr, "Usage: %s [-v] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
         fprintf(stderr, " %s http://example.net/sparql 'SELECT * WHERE { ?s ?p ?o } LIMIT 10'\n", argv[0]);
@@ -82,11 +97,11 @@ int main(int argc, char *argv[])
     }
 
     if (query) {
-        CURL *curl = sparql_curl_init(format, verbose);
-        CURLcode error = execute_query(curl, ep, query);
+        sparql_curl_init(&bits);
+        CURLcode error = execute_query(query, &bits);
         return error;
     } else {
-        interactive(ep, format, verbose);
+        interactive(&bits);
         printf("\n");
     }
 
@@ -108,52 +123,88 @@ static void save_history_dotfile(void)
     g_free(dotfile);
 }
 
-static CURL *sparql_curl_init(const char *format, int verbose)
+static void sparql_curl_init(query_bits *bits)
 {
-    CURL *curl = curl_easy_init();
+    bits->curl = curl_easy_init();
     struct curl_slist *headers = NULL;
-    char *accept = g_strdup_printf("Accept: %s", format);
+    char *accept = g_strdup_printf("Accept: %s", bits->format);
     headers = curl_slist_append(headers, accept);
     g_free(accept);
 
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, verbose);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-    return curl;
+    curl_easy_setopt(bits->curl, CURLOPT_VERBOSE, bits->verbose);
+    curl_easy_setopt(bits->curl, CURLOPT_HTTPHEADER, headers);
 }
 
-static int execute_query(CURL *curl, const char *ep, const char *query)
+/* CURLOPT_WRITEFUNCTION 
+CURLOPT_WRITEDATA */
+
+static size_t my_header_fn(void *ptr, size_t size, size_t nmemb, void *stream)
+{
+    query_bits *bits = (query_bits *) stream;
+
+    const char content_type[] = "Content-Type:";
+    const char *sparql = "application/sparql-results+xml";
+
+    if (size * nmemb > sizeof(content_type) && !strncasecmp((char *) ptr, content_type, sizeof(content_type) - 1)) {
+        /* content type */
+        char *type = (char *) ptr + sizeof(content_type);
+        size_t len = (size * nmemb) - sizeof(content_type);
+        if (!strcmp(bits->format, "text/plain") && len > strlen(sparql) && !strncmp(type, sparql, strlen(bits->format))) {
+            bits->xml_filter = 1;
+            strcpy(bits->filename, tmp_filename);
+            int fd = mkstemp(bits->filename);
+            bits->file = fdopen(fd, "a");
+            curl_easy_setopt(bits->curl, CURLOPT_WRITEDATA, bits->file);
+        }
+    }
+
+    return size * nmemb;
+}
+
+static int execute_query(const char *query, query_bits *bits)
 {
     char my_curl_error[CURL_ERROR_SIZE];
-    char *encoded = curl_easy_escape (curl, query, 0);
-    char *query_url = g_strdup_printf("%s?query=%s", ep, encoded);
+    char *encoded = curl_easy_escape (bits->curl, query, 0);
+    char *query_url = g_strdup_printf("%s?query=%s", bits->ep, encoded);
     curl_free(encoded);
 
-    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, my_curl_error);
-    curl_easy_setopt(curl, CURLOPT_URL, query_url);
-    CURLcode code = curl_easy_perform(curl);
+    /* default to not filtering */
+    bits->xml_filter = 0;
+    curl_easy_setopt(bits->curl, CURLOPT_WRITEDATA, stdout);
+
+    curl_easy_setopt(bits->curl, CURLOPT_ERRORBUFFER, my_curl_error);
+    curl_easy_setopt(bits->curl, CURLOPT_URL, query_url);
+    curl_easy_setopt(bits->curl, CURLOPT_HEADERFUNCTION, my_header_fn);
+    curl_easy_setopt(bits->curl, CURLOPT_HEADERDATA, bits);
+    CURLcode code = curl_easy_perform(bits->curl);
 
     if (code) {
-      fprintf(stderr, "CURL: %s\n", my_curl_error);
+        fprintf(stderr, "CURL: %s\n", my_curl_error);
+    }
+    if (bits->xml_filter) {
+        fclose(bits->file);
+        sr_parse(bits->filename);
+        unlink(bits->filename);
+        bits->xml_filter = 0;
     }
 
     return code;
 }
 
-static int check_endpoint(CURL *curl, const char *ep)
+static int check_endpoint(query_bits *bits)
 {
     char my_curl_error[CURL_ERROR_SIZE];
     CURLcode code;
 
-    code = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, my_curl_error);
-    if (!code) code = curl_easy_setopt(curl, CURLOPT_URL, ep);
-    if (!code) code = curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-    if (!code) code = curl_easy_perform(curl);
+    code = curl_easy_setopt(bits->curl, CURLOPT_ERRORBUFFER, my_curl_error);
+    if (!code) code = curl_easy_setopt(bits->curl, CURLOPT_URL, bits->ep);
+    if (!code) code = curl_easy_setopt(bits->curl, CURLOPT_NOBODY, 1);
+    if (!code) code = curl_easy_perform(bits->curl);
 
     /* put everything back regardless */
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
+    curl_easy_setopt(bits->curl, CURLOPT_NOBODY, 0);
     /* (some versions of?) curl forces HTTP requests to HEAD when NOBODY is set, but doesn't put it back... */
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
+    curl_easy_setopt(bits->curl, CURLOPT_HTTPGET, 1);
     /* can't put back ERRORBUFFER so future callers must set it ... */
 
     switch (code) {
@@ -172,10 +223,10 @@ static int check_endpoint(CURL *curl, const char *ep)
     }
 }
 
-static void interactive(const char *ep, const char *format, int verbose)
+static void interactive(query_bits *bits)
 {
-    const char *prompt = "sparql>";
-    const char *reprompt = "      >";
+    const char *prompt = "sparql#";
+    const char *reprompt = "      #";
 
     if (!isatty(0)) {
         /* no terminal input so disable TAB completion */
@@ -185,14 +236,15 @@ static void interactive(const char *ep, const char *format, int verbose)
     /* fill out readline functions */
     load_history_dotfile();
 
-    CURL *curl = sparql_curl_init(format, verbose);
-    if (check_endpoint(curl, ep)) {
+    sparql_curl_init(bits);
+    if (check_endpoint(bits)) {
         return;
     }
 
     char *query = NULL;
 
     do {
+        printf("\n"); /* ensure a blank line */
         /* assemble query string */
         char *line = readline(prompt);
         if (!line) break; /* EOF */
@@ -225,7 +277,7 @@ static void interactive(const char *ep, const char *format, int verbose)
             query[strlen(query) - 2] = '\0';
         }
         if (query) {
-            execute_query(curl, ep, query);
+            execute_query(query, bits);
         }
     } while (query);
 
