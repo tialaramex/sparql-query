@@ -17,6 +17,8 @@
 */
 
 #include <string.h>
+#include <locale.h>
+#include <langinfo.h>
 #include <libxml/parser.h>
 #include <glib.h>
 
@@ -46,9 +48,28 @@ enum xmlstate {
     STATE_DONE,
 };
 
+struct aa_chars {
+    char *H;
+    char *V;
+    char *TL;
+    char *TC;
+    char *TR;
+    char *CL;
+    char *CC;
+    char *CR;
+    char *BL;
+    char *BC;
+    char *BR;
+};
+
 typedef struct {
     enum xmlstate state;
+    int pass;
+    int col;
+    int cols;
+    int *widths;
     gchar *text;
+    struct aa_chars aa;
 } xmlctxt;
 
 static void xml_start_document(void *user_data)
@@ -82,7 +103,23 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
 
         case STATE_SPARQL_WANT_HEAD:
             if (!strcmp(name, "head")) {
+                if (ctxt->pass == 0) {
+                    /* do nothing */
+                } else {
+                    for (int i=0; i<ctxt->cols; i++) {
+                        if (i == 0) {
+                            printf("%s%s%s", ctxt->aa.TL, ctxt->aa.H, ctxt->aa.H);
+                        } else {
+                            printf("%s%s%s", ctxt->aa.TC, ctxt->aa.H, ctxt->aa.H);
+                        }
+                        for (int j=0; j<ctxt->widths[i]; j++) {
+                            printf(ctxt->aa.H);
+                        }
+                    }
+                    printf("%s\n", ctxt->aa.TR);
+                }
                 ctxt->state = STATE_HEAD;
+                ctxt->col = 0;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format (missing head)\n");
                 /* stop parsing */
@@ -95,9 +132,19 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                 while (attrs && *attrs) {
                     const char *key = (const char *) *(attrs++);
                     const char *value = (const char *) *(attrs++);
-                    if (!strcmp(key, "name")) {
-                        printf("\t?%s\t", value);
-                        /* do something with g_strdup(value); */
+                    if (ctxt->pass == 0) {
+                        /* we'd like to do
+                           ctxt->widths[ctxt->col] = strlen(value) + 1;
+                           but the widths array hasn't been allocated yet, cos
+                           we don't know how big it needs to be yet.
+                        */
+                        (ctxt->cols)++;
+                    } else {
+                        if (!strcmp(key, "name")) {
+                            printf("%s ?%*s ", ctxt->aa.V, -ctxt->widths[ctxt->col] + 1, value);
+                            (ctxt->col)++;
+                            /* do something with g_strdup(value); */
+                        }
                     }
                 }
                 break;
@@ -116,6 +163,21 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
 
         case STATE_SPARQL_WANT_RESULTS:
             if (!strcmp(name, "results")) {
+                if (ctxt->pass == 0) {
+                    /* do nothing */
+                } else {
+                    for (int i=0; i<ctxt->cols; i++) {
+                        if (i == 0) {
+                            printf("%s%s%s", ctxt->aa.CL, ctxt->aa.H, ctxt->aa.H);
+                        } else {
+                            printf("%s%s%s", ctxt->aa.CC, ctxt->aa.H, ctxt->aa.H);
+                        }
+                        for (int j=0; j<ctxt->widths[i]; j++) {
+                            printf(ctxt->aa.H);
+                        }
+                    }
+                    printf("%s\n", ctxt->aa.CR);
+                }
                 ctxt->state = STATE_RESULTS;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format (missing results)\n");
@@ -126,6 +188,7 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
         case STATE_RESULTS:
             if (!strcmp(name, "result")) {
                 ctxt->state = STATE_RESULT;
+                ctxt->col = 0;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format (missing result)\n");
                 /* stop parsing */
@@ -181,8 +244,12 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
     switch  (ctxt->state) {
         case STATE_HEAD:
             if (!strcmp(name, "head")) {
-                /* FIXME if one or more variables then expect results, otherwise boolean */
-                printf("\n");
+                if (ctxt->pass == 0) {
+                    ctxt->widths = g_new0(int, MIN(ctxt->cols, 1));
+                } else {
+                    /* FIXME if one or more variables then expect results, otherwise boolean */
+                    printf("%s\n", ctxt->aa.V);
+                }
                 ctxt->state = STATE_SPARQL_WANT_RESULTS;
             }
             break;
@@ -192,14 +259,24 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             break;
 
         case STATE_BOOLEAN:
-            printf("boolean '%s'\n", ctxt->text);
-            /* by now ctxt->text should be 'true' or 'false' */
-            /* expect sparql close next */
+            if (ctxt->pass == 0) {
+                ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text) + 10, ctxt->widths[ctxt->col]);
+            } else {
+                printf("boolean '%*s'\n", -ctxt->widths[ctxt->col] + 10, ctxt->text);
+                /* by now ctxt->text should be 'true' or 'false' */
+                /* expect sparql close next */
+            }
             break;
 
         case STATE_URI:
             if (!strcmp(name, "uri")) {
-                printf("<%s>  ", ctxt->text);
+                if (ctxt->pass == 0) {
+                    if (ctxt->widths) {
+                        ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text) + 2, ctxt->widths[ctxt->col]);
+                    }
+                } else {
+                    printf("%s <%s>%*s ", ctxt->aa.V, ctxt->text, -ctxt->widths[ctxt->col] + 2 + (int)strlen(ctxt->text), "");
+                }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after URI\n", name);
@@ -208,7 +285,11 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
 
         case STATE_LITERAL:
             if (!strcmp(name, "literal")) {
-                printf("%s  ", ctxt->text);
+                if (ctxt->pass == 0) {
+                    ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text), ctxt->widths[ctxt->col]);
+                } else {
+                    printf("%s %*s ", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text);
+                }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after literal\n", name);
@@ -218,6 +299,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_BINDING_DONE:
             if (!strcmp(name, "binding")) {
                 ctxt->state = STATE_RESULT;
+                ctxt->col++;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after binding\n", name);
             }
@@ -225,7 +307,11 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
 
         case STATE_RESULT:
             if (!strcmp(name, "result")) {
-                printf("\n");
+                if (ctxt->pass == 0) {
+                    /* do nothing */
+                } else {
+                    printf("%s\n", ctxt->aa.V);
+                }
                 ctxt->state = STATE_RESULTS;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after result\n", name);
@@ -235,6 +321,21 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_RESULTS:
             if (!strcmp(name, "results")) {
                 ctxt->state = STATE_RESULTS_DONE;
+                if (ctxt->pass == 0) {
+                    /* do nothing */
+                } else {
+                    for (int i=0; i<ctxt->cols; i++) {
+                        if (i == 0) {
+                            printf("%s%s%s", ctxt->aa.BL, ctxt->aa.H, ctxt->aa.H);
+                        } else {
+                            printf("%s%s%s", ctxt->aa.BC, ctxt->aa.H, ctxt->aa.H);
+                        }
+                        for (int j=0; j<ctxt->widths[i]; j++) {
+                            printf(ctxt->aa.H);
+                        }
+                    }
+                    printf("%s\n", ctxt->aa.BR);
+                }
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after results\n", name);
             }
@@ -281,7 +382,40 @@ static xmlSAXHandler sax = {
 int sr_parse(const char *filename)
 {
     xmlctxt *ctxt = g_new0(xmlctxt, 1);
+    setlocale(LC_ALL, "");
+    int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
+    if (utf8_mode) {
+        ctxt->aa.H = "─";
+        ctxt->aa.V = "│";
+        ctxt->aa.TL = "┌";
+        ctxt->aa.TC = "┬";
+        ctxt->aa.TR = "┐";
+        ctxt->aa.CL = "├";
+        ctxt->aa.CC = "┼";
+        ctxt->aa.CR = "┤";
+        ctxt->aa.BL = "└";
+        ctxt->aa.BC = "┴";
+        ctxt->aa.BR = "┘";
+    } else {
+        ctxt->aa.H = "-";
+        ctxt->aa.V = "|";
+        ctxt->aa.TL = ".";
+        ctxt->aa.TC = "-";
+        ctxt->aa.TR = ".";
+        ctxt->aa.CL = "|";
+        ctxt->aa.CC = "+";
+        ctxt->aa.CR = "|";
+        ctxt->aa.BL = "'";
+        ctxt->aa.BC = "-";
+        ctxt->aa.BR = "'";
+    }
+    ctxt->pass = 0;
     xmlSAXUserParseFile(&sax, (void *) ctxt, filename);
+    ctxt->pass = 1;
+    xmlSAXUserParseFile(&sax, (void *) ctxt, filename);
+    if (ctxt->widths) {
+        g_free(ctxt->widths);
+    }
     g_free(ctxt);
 
     return 0;
