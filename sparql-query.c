@@ -231,8 +231,8 @@ static int check_endpoint(query_bits *bits)
 
 static void interactive(query_bits *bits)
 {
-    const char *prompt = "sparql#";
-    const char *reprompt = "      #";
+    const char *prompt = "sparql$ ";
+    const char *reprompt = "      $ ";
 
     if (!isatty(0)) {
         /* no terminal input so disable TAB completion */
