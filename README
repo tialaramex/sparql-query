@@ -1,11 +1,12 @@
 sparql-query is a command-line tool for accessing SPARQL endpoints over HTTP
 
 It has been intentionally designed to 'feel' similar to tools for
-interrogating SQL databases. It supports readline so that you can more easily
-recall and edit previous queries, even across sessions. It can be used non-
-interactively for example from a shell script. It doesn't have difficult or
-hard to find dependencies so it should build fairly easily on typical Unix-like
-systems.
+interrogating SQL databases. For example, you can enter a query over several
+lines, using a semi-colon at the end of a line to indicate the end of your
+query.  It also supports readline so that you can more easily recall and edit
+previous queries, even across sessions. It can be used non-interactively, for
+example from a shell script. It doesn't have difficult or hard to find
+dependencies so it should build fairly easily on typical Unix-like systems.
 
 You can find a list of some existing public SPARQL endpoints on the ESW wiki
 http://esw.w3.org/topic/SparqlEndpoints
@@ -17,11 +18,12 @@ sparql-query http://dbpedia.org/sparql
 
 
 sparql-query can be run non-interactively by specifying your entire SPARQL
-query as the last parameter to the command. The query will be executed and
-the results streamed to standard out. You may need to be careful with any
-quoting rules in your shell if using sparql-query this way directly from
-the command line or a script, due to SPARQL making a lot of use of symbols
-that are meaningful to the shell.
+query as the last parameter to the command. In this case you should terminate
+the query with a semi-colon. The query will be executed and the results
+streamed to standard out. You may need to be careful with any quoting rules
+in your shell if using sparql-query this way directly from the command line
+or a script, due to SPARQL making a lot of use of symbols that are meaningful
+to the shell.
 
 You can specify a MIME type to be used in the Accept: line for the HTTP
 query in a SPARQL query, as a hint to the endpoint about your preferred
