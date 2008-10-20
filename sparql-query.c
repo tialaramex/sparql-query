@@ -53,7 +53,7 @@ static void interactive(query_bits *bits);
 
 int main(int argc, char *argv[])
 {
-    query_bits bits = { .format = "text/plain", .ep = NULL, .verbose = 0, .xml_filter = 0 };
+    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0 };
 
     static char *optstring = "f:v";
     char *query = NULL;
@@ -97,10 +97,16 @@ int main(int argc, char *argv[])
     }
 
     if (query) {
+        if (!bits.format) {
+            bits.format = "application/sparql-results+xml";
+        }
         sparql_curl_init(&bits);
         CURLcode error = execute_query(query, &bits);
         return error;
     } else {
+        if (!bits.format) {
+            bits.format = "text/plain";
+        }
         interactive(&bits);
         printf("\n");
     }
