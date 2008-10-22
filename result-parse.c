@@ -106,7 +106,7 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                 if (ctxt->pass == 0) {
                     /* do nothing */
                 } else {
-                    for (int i=0; i<ctxt->cols; i++) {
+                    for (int i=0; i<MAX(ctxt->cols, 1); i++) {
                         if (i == 0) {
                             printf("%s%s%s", ctxt->aa.TL, ctxt->aa.H, ctxt->aa.H);
                         } else {
@@ -245,12 +245,17 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_HEAD:
             if (!strcmp(name, "head")) {
                 if (ctxt->pass == 0) {
-                    ctxt->widths = g_new0(int, MIN(ctxt->cols, 1));
+                    ctxt->widths = g_new0(int, MAX(ctxt->cols, 1));
                 } else {
-                    /* FIXME if one or more variables then expect results, otherwise boolean */
-                    printf("%s\n", ctxt->aa.V);
+                    if (ctxt->cols > 0) {
+                        printf("%s\n", ctxt->aa.V);
+                    }
                 }
-                ctxt->state = STATE_SPARQL_WANT_RESULTS;
+                if (ctxt->cols > 0) {
+                    ctxt->state = STATE_SPARQL_WANT_RESULTS;
+                } else {
+                    ctxt->state = STATE_SPARQL_WANT_BOOLEAN;
+                }
             }
             break;
 
@@ -260,11 +265,18 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
 
         case STATE_BOOLEAN:
             if (ctxt->pass == 0) {
-                ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text) + 10, ctxt->widths[ctxt->col]);
+                ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text), ctxt->widths[ctxt->col]);
+                ctxt->state = STATE_RESULTS_DONE;
             } else {
-                printf("boolean '%*s'\n", -ctxt->widths[ctxt->col] + 10, ctxt->text);
+                printf("%s %*s %s\n", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text, ctxt->aa.V);
+                printf(ctxt->aa.BL);
+                for (int i=0; i<ctxt->widths[ctxt->col] + 2; i++) {
+                    printf(ctxt->aa.H);
+                }
+                printf("%s\n", ctxt->aa.BR);
                 /* by now ctxt->text should be 'true' or 'false' */
                 /* expect sparql close next */
+                ctxt->state = STATE_RESULTS_DONE;
             }
             break;
 
