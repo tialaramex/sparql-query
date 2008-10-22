@@ -41,6 +41,7 @@ typedef struct query_bits_struct {
     char filename[20];
     int verbose;
     int xml_filter;
+    int parse;  /* true if we want to parse results */
 } query_bits;
 
 /* must not be longer than 20 bytes, see above */
@@ -53,7 +54,7 @@ static void interactive(query_bits *bits);
 
 int main(int argc, char *argv[])
 {
-    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0 };
+    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1};
 
     static char *optstring = "f:v";
     char *query = NULL;
@@ -63,6 +64,7 @@ int main(int argc, char *argv[])
     static struct option long_options[] = {
         { "format", 1, 0, 'f' },
         { "verbose", 0, 0, 'v' },
+        { "noparse", 0, 0, 'n' },
         { 0, 0, 0, 0 }
     };
 
@@ -71,6 +73,8 @@ int main(int argc, char *argv[])
             bits.format = optarg;
         } else if (c == 'v') {
             bits.verbose++;
+        } else if (c == 'n') {
+            bits.parse = 0;
         } else {
             help = 1;
         }
@@ -88,25 +92,23 @@ int main(int argc, char *argv[])
 
     if (help || !bits.ep) {
         fprintf(stderr, "%s revision %s\n", argv[0], GIT_REV);
-        fprintf(stderr, "Usage: %s [-v] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-v] [-n] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
         fprintf(stderr, " %s http://example.net/sparql 'SELECT * WHERE { ?s ?p ?o } LIMIT 10'\n", argv[0]);
+        fprintf(stderr, " -n, --noparse  don't parse SPARQL XML results\n");
         fprintf(stderr, " <ep> is a SPARQL HTTP endpoint\n");
         fprintf(stderr, " <query> is a SPARQL query to execute immediately in non-interactive mode\n");
         fprintf(stderr, "remember to use shell quoting if necessary\n");
         return 1;
     }
 
+    if (!bits.format) {
+        bits.format = "application/sparql-results+xml";
+    }
     if (query) {
-        if (!bits.format) {
-            bits.format = "application/sparql-results+xml";
-        }
         sparql_curl_init(&bits);
         CURLcode error = execute_query(query, &bits);
         return error;
     } else {
-        if (!bits.format) {
-            bits.format = "text/plain";
-        }
         interactive(&bits);
         printf("\n");
     }
@@ -155,7 +157,7 @@ static size_t my_header_fn(void *ptr, size_t size, size_t nmemb, void *stream)
         /* content type */
         char *type = (char *) ptr + sizeof(content_type);
         size_t len = (size * nmemb) - sizeof(content_type);
-        if (!strcmp(bits->format, "text/plain") && len > strlen(sparql) && !strncmp(type, sparql, strlen(bits->format))) {
+        if (bits->parse == 1 && len > strlen(sparql) && !strncmp(type, sparql, strlen(bits->format))) {
             bits->xml_filter = 1;
             strcpy(bits->filename, tmp_filename);
             int fd = mkstemp(bits->filename);
@@ -238,6 +240,7 @@ static void interactive(query_bits *bits)
         /* no terminal input so disable TAB completion */
         rl_bind_key ('\t', rl_insert);
         reprompt = prompt = "";
+        bits->parse = 0;
     }
     /* fill out readline functions */
     load_history_dotfile();
