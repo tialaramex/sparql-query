@@ -22,6 +22,9 @@
 #include <libxml/parser.h>
 #include <glib.h>
 
+/* protect us from Linux's lame strlen */
+#define safe_strlen(_s) ((_s) ? strlen(_s) : 0)
+
 enum xmlstate {
     STATE_START,
     STATE_SPARQL_WANT_HEAD,
@@ -265,7 +268,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
 
         case STATE_BOOLEAN:
             if (ctxt->pass == 0) {
-                ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text), ctxt->widths[ctxt->col]);
+                ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->col]);
                 ctxt->state = STATE_RESULTS_DONE;
             } else {
                 printf("%s %*s %s\n", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text, ctxt->aa.V);
@@ -284,10 +287,10 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             if (!strcmp(name, "uri")) {
                 if (ctxt->pass == 0) {
                     if (ctxt->widths) {
-                        ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text) + 2, ctxt->widths[ctxt->col]);
+                        ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->col]);
                     }
                 } else {
-                    printf("%s <%s>%*s ", ctxt->aa.V, ctxt->text, -ctxt->widths[ctxt->col] + 2 + (int)strlen(ctxt->text), "");
+                    printf("%s <%s>%*s ", ctxt->aa.V, ctxt->text, -ctxt->widths[ctxt->col] + 2 + (int)safe_strlen(ctxt->text), "");
                 }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
@@ -298,9 +301,9 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_LITERAL:
             if (!strcmp(name, "literal")) {
                 if (ctxt->pass == 0) {
-                    ctxt->widths[ctxt->col] = MAX(strlen(ctxt->text), ctxt->widths[ctxt->col]);
+                    ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->col]);
                 } else {
-                    printf("%s %*s ", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text);
+                    printf("%s %*s ", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text ? ctxt->text : "");
                 }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
