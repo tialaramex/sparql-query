@@ -22,9 +22,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <glib.h>
-#include <rasqal.h>
 #include <getopt.h>
-#include <sys/time.h>
 
 #include <curl/curl.h>
 
