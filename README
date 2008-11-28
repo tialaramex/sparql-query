@@ -2,7 +2,8 @@ sparql-query is a command-line tool for accessing SPARQL endpoints over HTTP
 
 Dependencies:
 
-You will need at least glib, libcurl and GNU readline, on a Unix-like system
+You will need at least glib, libcurl, GNU readline, and libxml2, on a Unix-like
+system.
 
 
 It has been intentionally designed to 'feel' similar to tools for
