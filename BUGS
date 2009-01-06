@@ -1,0 +1,31 @@
+Here are the currently known bugs (feel free to contribute patches)
+
+
+SPARQL XML result parsing doesn't handle unbound results well
+-------------------------------------------------------------
+
+e.g.  SELECT ?c ?b ?a WHERE { ?a ?b _:x . OPTIONAL { ?a ?b ?c . FILTER (isblank(?c)) } } LIMIT 10;
+will mis-align the results when ?c isn't bound because the match wasn't a bNode.
+
+Box formatting doesn't handle wide variable names well
+------------------------------------------------------
+
+Nice box formatting doesn't handle variable names wider than the results in
+their column although it does now have a more sensible default of at least two
+characters
+
+
+Poor feedback for some HTTP errors
+----------------------------------
+
+When an HTTP error occurs but isn't accompanied by explanatory text, there's
+no feedback to the user
+
+e.g. if the SPARQL HTTP server returns HTTP error code 501 but doesn't include
+text or an HTML document explaining the error then only a blank line is shown.
+Probably the HTTP error code should be returned in this case, and perhaps long
+HTML error messages should be suppressed since the SPARQL client isn't able to
+render them as intended anyway.
+
+
+
