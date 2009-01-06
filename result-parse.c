@@ -249,6 +249,9 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             if (!strcmp(name, "head")) {
                 if (ctxt->pass == 0) {
                     ctxt->widths = g_new0(int, MAX(ctxt->cols, 1));
+                    for (int k = 0; k < ctxt->cols; ++k) {
+                        ctxt->widths[k] = 2;
+                    }
                 } else {
                     if (ctxt->cols > 0) {
                         printf("%s\n", ctxt->aa.V);
