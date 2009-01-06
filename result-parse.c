@@ -314,6 +314,19 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             }
             break;
 
+        case STATE_BNODE:
+            if (!strcmp(name, "bnode")) {
+                if (ctxt->pass == 0) {
+                    ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->col]);
+                } else {
+                    printf("%s _:%*s ", ctxt->aa.V, -ctxt->widths[ctxt->col] + 2, ctxt->text ? ctxt->text : "");
+                }
+                ctxt->state = STATE_BINDING_DONE;
+            } else {
+                fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after bnode\n", name);
+            }
+            break;
+
         case STATE_BINDING_DONE:
             if (!strcmp(name, "binding")) {
                 ctxt->state = STATE_RESULT;
