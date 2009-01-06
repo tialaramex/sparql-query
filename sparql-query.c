@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 {
     query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1};
 
-    static char *optstring = "f:v";
+    static char *optstring = "f:vnh";
     char *query = NULL;
     int help = 0;
     int c, opt_index = 0;
@@ -63,6 +63,7 @@ int main(int argc, char *argv[])
         { "format", 1, 0, 'f' },
         { "verbose", 0, 0, 'v' },
         { "noparse", 0, 0, 'n' },
+        { "help", 0, 0, 'h' },
         { 0, 0, 0, 0 }
     };
 
