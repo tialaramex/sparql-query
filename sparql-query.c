@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <glib.h>
 #include <getopt.h>
+#include <sys/time.h>
 
 #include <curl/curl.h>
 
@@ -40,6 +41,7 @@ typedef struct query_bits_struct {
     int verbose;
     int xml_filter;
     int parse;  /* true if we want to parse results */
+    int time; /* print execution time */
 } query_bits;
 
 /* must not be longer than 20 bytes, see above */
@@ -52,9 +54,9 @@ static void interactive(query_bits *bits);
 
 int main(int argc, char *argv[])
 {
-    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1};
+    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1, .time = 0};
 
-    static char *optstring = "f:vnh";
+    static char *optstring = "f:vnth";
     char *query = NULL;
     int help = 0;
     int c, opt_index = 0;
@@ -63,6 +65,7 @@ int main(int argc, char *argv[])
         { "format", 1, 0, 'f' },
         { "verbose", 0, 0, 'v' },
         { "noparse", 0, 0, 'n' },
+        { "time", 0, 0, 't' },
         { "help", 0, 0, 'h' },
         { 0, 0, 0, 0 }
     };
@@ -74,6 +77,8 @@ int main(int argc, char *argv[])
             bits.verbose++;
         } else if (c == 'n') {
             bits.parse = 0;
+        } else if (c == 't') {
+            bits.time = 1;
         } else {
             help = 1;
         }
@@ -91,9 +96,10 @@ int main(int argc, char *argv[])
 
     if (help || !bits.ep) {
         fprintf(stderr, "%s revision %s\n", argv[0], GIT_REV);
-        fprintf(stderr, "Usage: %s [-v] [-n] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-v] [-n] [-t] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
         fprintf(stderr, " %s http://example.net/sparql 'SELECT * WHERE { ?s ?p ?o } LIMIT 10'\n", argv[0]);
         fprintf(stderr, " -n, --noparse  don't parse SPARQL XML results\n");
+        fprintf(stderr, " -t, --time     print execution time for each query\n");
         fprintf(stderr, " <ep> is a SPARQL HTTP endpoint\n");
         fprintf(stderr, " <query> is a SPARQL query to execute immediately in non-interactive mode\n");
         fprintf(stderr, "remember to use shell quoting if necessary\n");
@@ -113,6 +119,18 @@ int main(int argc, char *argv[])
     }
 
     return 0;
+}
+
+static double double_time()
+{
+    struct timeval now;
+
+    /* TODO probably this should use clock_gettime(CLOCK_MONOTONIC) where supported */
+    if (gettimeofday(&now, 0) == -1) {
+        return 0.0;
+    }
+
+    return (double)now.tv_sec + (now.tv_usec * 0.000001);
 }
 
 static void load_history_dotfile(void)
@@ -183,6 +201,8 @@ static int execute_query(const char *query, query_bits *bits)
     curl_easy_setopt(bits->curl, CURLOPT_URL, query_url);
     curl_easy_setopt(bits->curl, CURLOPT_HEADERFUNCTION, my_header_fn);
     curl_easy_setopt(bits->curl, CURLOPT_HEADERDATA, bits);
+    double then = 0.0;
+    if (bits->time) then = double_time();
     CURLcode code = curl_easy_perform(bits->curl);
 
     if (code) {
@@ -193,6 +213,10 @@ static int execute_query(const char *query, query_bits *bits)
         sr_parse(bits->filename);
         unlink(bits->filename);
         bits->xml_filter = 0;
+    }
+    if (bits->time) {
+        double now = double_time();
+        printf("Execution time: %fms\n", (now-then)*1000.0);
     }
 
     return code;
