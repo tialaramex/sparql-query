@@ -208,15 +208,15 @@ static int execute_query(const char *query, query_bits *bits)
     if (code) {
         fprintf(stderr, "CURL: %s\n", my_curl_error);
     }
+    if (bits->time) {
+        double now = double_time();
+        printf("Execution time: %fms\n", (now-then)*1000.0);
+    }
     if (bits->xml_filter) {
         fclose(bits->file);
         sr_parse(bits->filename);
         unlink(bits->filename);
         bits->xml_filter = 0;
-    }
-    if (bits->time) {
-        double now = double_time();
-        printf("Execution time: %fms\n", (now-then)*1000.0);
     }
 
     return code;
