@@ -25,6 +25,11 @@
 /* protect us from Linux's lame strlen */
 #define safe_strlen(_s) ((_s) ? strlen(_s) : 0)
 
+/* number of columns names to record widths for in 1st pass */
+#define TMP_COLS 32
+
+static const char *nullstr = "";
+
 enum xmlstate {
     STATE_START,
     STATE_SPARQL_WANT_HEAD,
@@ -65,15 +70,33 @@ struct aa_chars {
     char *BR;
 };
 
-typedef struct {
+typedef struct _xmlctxt {
     enum xmlstate state;
     int pass;
     int col;
     int cols;
     int *widths;
+    char **names;
+    char **row;
+    int tmp_widths[TMP_COLS];
     gchar *text;
     struct aa_chars aa;
+    GSList *name_list;
+    int current_col;
 } xmlctxt;
+
+static int name_to_col(xmlctxt *ctxt, const char *name)
+{
+    for (int i=0; i<ctxt->cols; i++) {
+        if (!strcmp(name, ctxt->names[i])) {
+            return i;
+        }
+    }
+
+    fprintf(stderr, "unknown column name ‘%s’ in results\n", name);
+
+    return 0;
+}
 
 static void xml_start_document(void *user_data)
 {
@@ -136,17 +159,15 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                     const char *key = (const char *) *(attrs++);
                     const char *value = (const char *) *(attrs++);
                     if (ctxt->pass == 0) {
-                        /* we'd like to do
-                           ctxt->widths[ctxt->col] = strlen(value) + 1;
-                           but the widths array hasn't been allocated yet, cos
-                           we don't know how big it needs to be yet.
-                        */
+                        if (ctxt->cols < TMP_COLS) {
+                            ctxt->tmp_widths[ctxt->cols] = strlen(value) + 1;
+                        }
+                        ctxt->name_list = g_slist_append(ctxt->name_list, g_strdup(value));
                         (ctxt->cols)++;
                     } else {
                         if (!strcmp(key, "name")) {
                             printf("%s ?%*s ", ctxt->aa.V, -ctxt->widths[ctxt->col] + 1, value);
                             (ctxt->col)++;
-                            /* do something with g_strdup(value); */
                         }
                     }
                 }
@@ -200,6 +221,18 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
 
         case STATE_RESULT:
             if (!strcmp(name, "binding")) {
+                while (attrs && *attrs) {
+                    const char *key = (const char *) *(attrs++);
+                    const char *value = (const char *) *(attrs++);
+                    ctxt->current_col = -1;
+                    if (!strcmp(key, "name")) {
+                        ctxt->current_col = name_to_col(ctxt, value);
+                    }
+                    if (ctxt->current_col == -1) {
+                        fprintf(stderr, "no column name found in results\n");
+                        ctxt->current_col = 0;
+                    }
+                }
                 ctxt->state = STATE_BINDING;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format (missing binding)\n");
@@ -249,8 +282,22 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             if (!strcmp(name, "head")) {
                 if (ctxt->pass == 0) {
                     ctxt->widths = g_new0(int, MAX(ctxt->cols, 1));
+                    ctxt->names = g_new0(char *, MAX(ctxt->cols, 1));
+                    ctxt->row = g_new0(char *, MAX(ctxt->cols, 1));
+                    GSList *nlist = ctxt->name_list;
                     for (int k = 0; k < ctxt->cols; ++k) {
-                        ctxt->widths[k] = 2;
+                        if (!nlist) {
+                            fprintf(stderr, "name list error\n");
+                            exit(1);
+                        }
+                        ctxt->names[k] = nlist->data;
+                        nlist = nlist->next;
+                        ctxt->row[k] = (char *)nullstr;
+                        if (k < TMP_COLS) {
+                            ctxt->widths[k] = ctxt->tmp_widths[k];
+                        } else {
+                            ctxt->widths[k] = 2;
+                        }
                     }
                 } else {
                     if (ctxt->cols > 0) {
@@ -290,10 +337,10 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             if (!strcmp(name, "uri")) {
                 if (ctxt->pass == 0) {
                     if (ctxt->widths) {
-                        ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->col]);
+                        ctxt->widths[ctxt->current_col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->current_col]);
                     }
                 } else {
-                    printf("%s <%s>%*s ", ctxt->aa.V, ctxt->text, -ctxt->widths[ctxt->col] + 2 + (int)safe_strlen(ctxt->text), "");
+                    ctxt->row[ctxt->current_col] = g_strdup_printf("<%s>", ctxt->text);
                 }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
@@ -304,9 +351,9 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_LITERAL:
             if (!strcmp(name, "literal")) {
                 if (ctxt->pass == 0) {
-                    ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->col]);
+                    ctxt->widths[ctxt->current_col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->current_col]);
                 } else {
-                    printf("%s %*s ", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text ? ctxt->text : "");
+                    ctxt->row[ctxt->current_col] = g_strdup_printf("%s", ctxt->text ? ctxt->text : "");
                 }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
@@ -317,9 +364,9 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_BNODE:
             if (!strcmp(name, "bnode")) {
                 if (ctxt->pass == 0) {
-                    ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->col]);
+                    ctxt->widths[ctxt->current_col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->current_col]);
                 } else {
-                    printf("%s _:%*s ", ctxt->aa.V, -ctxt->widths[ctxt->col] + 2, ctxt->text ? ctxt->text : "");
+                    ctxt->row[ctxt->current_col] = g_strdup_printf("_:%s", ctxt->text ? ctxt->text : "");
                 }
                 ctxt->state = STATE_BINDING_DONE;
             } else {
@@ -330,7 +377,6 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_BINDING_DONE:
             if (!strcmp(name, "binding")) {
                 ctxt->state = STATE_RESULT;
-                ctxt->col++;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after binding\n", name);
             }
@@ -341,6 +387,14 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                 if (ctxt->pass == 0) {
                     /* do nothing */
                 } else {
+                    /* print the reuslt row */
+                    for (int i=0; i<ctxt->cols; i++) {
+                        printf("%s %s%*s ", ctxt->aa.V, ctxt->row[i], -ctxt->widths[i] + (int)safe_strlen(ctxt->row[i]), "");
+                        if (ctxt->row[i] != nullstr) {
+                            g_free(ctxt->row[i]);
+                            ctxt->row[i] = (char *)nullstr;
+                        }
+                    }
                     printf("%s\n", ctxt->aa.V);
                 }
                 ctxt->state = STATE_RESULTS;
