@@ -201,22 +201,22 @@ static int execute_query(const char *query, query_bits *bits)
     curl_easy_setopt(bits->curl, CURLOPT_URL, query_url);
     curl_easy_setopt(bits->curl, CURLOPT_HEADERFUNCTION, my_header_fn);
     curl_easy_setopt(bits->curl, CURLOPT_HEADERDATA, bits);
-    double then = 0.0;
+    double then = 0.0, now = 0.0;
     if (bits->time) then = double_time();
     CURLcode code = curl_easy_perform(bits->curl);
 
     if (code) {
         fprintf(stderr, "CURL: %s\n", my_curl_error);
     }
-    if (bits->time) {
-        double now = double_time();
-        printf("Execution time: %fms\n", (now-then)*1000.0);
-    }
+    if (bits->time) now = double_time();
     if (bits->xml_filter) {
         fclose(bits->file);
         sr_parse(bits->filename);
         unlink(bits->filename);
         bits->xml_filter = 0;
+    }
+    if (bits->time) {
+        printf("Execution time: %.1fms\n", (now-then)*1000.0);
     }
 
     return code;
