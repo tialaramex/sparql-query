@@ -216,7 +216,7 @@ static int execute_query(const char *query, query_bits *bits)
         bits->xml_filter = 0;
     }
     if (bits->time) {
-        printf("Execution time: %.1fms\n", (now-then)*1000.0);
+        fprintf(stderr, "Execution time: %.1fms\n", (now-then)*1000.0);
     }
 
     return code;
