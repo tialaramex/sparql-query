@@ -1,6 +1,6 @@
 BINS = sparql-query
 REQUIRES = glib-2.0 libcurl libxml-2.0
-gitrev := $(shell git-rev-parse HEAD)
+gitrev := $(shell git-rev-parse --short HEAD)
 
 # PROFILE = -pg
 CFLAGS = -std=gnu99 -Wall -DGIT_REV=\"$(gitrev)\" $(PROFILE) -g -O2 `pkg-config --cflags $(REQUIRES)`
