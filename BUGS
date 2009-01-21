@@ -1,6 +1,16 @@
 Here are the currently known bugs (feel free to contribute patches)
 
 
+
+Datatype & Language tags not shown in columnised view
+-----------------------------------------------------
+
+By default SPARQL XML results are transformed to a more user friendly column
+view. However in this view the datatype or language tag aren't shown. If you
+need to see attributes of a literal you should disable the view with the
+-n command line switch.
+
+
 Poor feedback for some HTTP errors
 ----------------------------------
 
