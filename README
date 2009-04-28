@@ -38,6 +38,10 @@ application/sparql-results+xml  when interactive the default is text/plain
 and the sparql-query program will translate SPARQL results format into a more
 humane format for display.
 
+ToDo
+
+Add some way to do PUT uploading of RDF to complaint stores, maybe?
+
 
 sparql-query was developed by Nick Lamb and Steve Harris at Garlik. You are
 welcome to modify, copy and redistribute this software under the terms of the
