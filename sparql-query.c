@@ -56,9 +56,10 @@ int main(int argc, char *argv[])
 {
     query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1, .time = 0};
 
-    static char *optstring = "f:vnth";
+    static char *optstring = "f:vnthp";
     char *query = NULL;
     int help = 0;
+    int pipe = 0;
     int c, opt_index = 0;
 
     static struct option long_options[] = {
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
         { "noparse", 0, 0, 'n' },
         { "time", 0, 0, 't' },
         { "help", 0, 0, 'h' },
+        { "pipe", 0, 0, 'p' },
         { 0, 0, 0, 0 }
     };
 
@@ -79,6 +81,8 @@ int main(int argc, char *argv[])
             bits.parse = 0;
         } else if (c == 't') {
             bits.time = 1;
+        } else if (c == 'p') {
+            pipe = 1;
         } else {
             help = 1;
         }
@@ -96,10 +100,11 @@ int main(int argc, char *argv[])
 
     if (help || !bits.ep) {
         fprintf(stderr, "%s revision %s\n", argv[0], GIT_REV);
-        fprintf(stderr, "Usage: %s [-v] [-n] [-t] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-v] [-n] [-t] [-p] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
         fprintf(stderr, " %s http://example.net/sparql 'SELECT * WHERE { ?s ?p ?o } LIMIT 10'\n", argv[0]);
         fprintf(stderr, " -n, --noparse  don't parse SPARQL XML results\n");
         fprintf(stderr, " -t, --time     print execution time for each query\n");
+        fprintf(stderr, " -p, --pipe     read query from standard input and execute immediately\n");
         fprintf(stderr, " <ep> is a SPARQL HTTP endpoint\n");
         fprintf(stderr, " <query> is a SPARQL query to execute immediately in non-interactive mode\n");
         fprintf(stderr, "remember to use shell quoting if necessary\n");
@@ -109,6 +114,24 @@ int main(int argc, char *argv[])
     if (!bits.format) {
         bits.format = "application/sparql-results+xml";
     }
+
+    if (!query && pipe) {
+	ssize_t obtained = 0;
+	size_t querylen = 0;
+	char block[1024];
+	while ((obtained = read(STDIN_FILENO, block, 1024)) != 0) {
+	    if (obtained < 0) {
+		perror("failed to read from standard input");
+		return 1;
+	    }
+	    query = (char *)realloc(query, querylen + obtained + 1);
+	    memcpy(query + querylen, block, obtained);
+	    querylen += obtained;
+	}
+	if (querylen == 0) return 0;
+	query[querylen] = '\0';
+    }
+
     if (query) {
         sparql_curl_init(&bits);
         CURLcode error = execute_query(query, &bits);
