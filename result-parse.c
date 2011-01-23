@@ -139,7 +139,7 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                             printf("%s%s%s", ctxt->aa.TC, ctxt->aa.H, ctxt->aa.H);
                         }
                         for (int j=0; j<ctxt->widths[i]; j++) {
-                            printf(ctxt->aa.H);
+                            printf("%s", ctxt->aa.H);
                         }
                     }
                     printf("%s\n", ctxt->aa.TR);
@@ -197,7 +197,7 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                             printf("%s%s%s", ctxt->aa.CC, ctxt->aa.H, ctxt->aa.H);
                         }
                         for (int j=0; j<ctxt->widths[i]; j++) {
-                            printf(ctxt->aa.H);
+                            printf("%s", ctxt->aa.H);
                         }
                     }
                     printf("%s\n", ctxt->aa.CR);
@@ -322,9 +322,9 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                 ctxt->state = STATE_RESULTS_DONE;
             } else {
                 printf("%s %*s %s\n", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text, ctxt->aa.V);
-                printf(ctxt->aa.BL);
+                printf("%s", ctxt->aa.BL);
                 for (int i=0; i<ctxt->widths[ctxt->col] + 2; i++) {
-                    printf(ctxt->aa.H);
+                    printf("%s", ctxt->aa.H);
                 }
                 printf("%s\n", ctxt->aa.BR);
                 /* by now ctxt->text should be 'true' or 'false' */
@@ -416,7 +416,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                             printf("%s%s%s", ctxt->aa.BC, ctxt->aa.H, ctxt->aa.H);
                         }
                         for (int j=0; j<ctxt->widths[i]; j++) {
-                            printf(ctxt->aa.H);
+                            printf("%s", ctxt->aa.H);
                         }
                     }
                     printf("%s\n", ctxt->aa.BR);

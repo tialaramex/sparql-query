@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <glib.h>
 #include <getopt.h>
 #include <sys/time.h>
@@ -42,19 +43,23 @@ typedef struct query_bits_struct {
     int xml_filter;
     int parse;  /* true if we want to parse results */
     int time; /* print execution time */
+    const char *operation;
 } query_bits;
 
 /* must not be longer than 20 bytes, see above */
 static const char *tmp_filename = "/tmp/sparql-XXXXXXX";
 
-static int execute_query(const char *query, query_bits *bits);
+static int execute_operation(const char *query, query_bits *bits);
 static void sparql_curl_init(query_bits *bits);
 
 static void interactive(query_bits *bits);
 
+static const char *op_query = "query";
+static const char *op_update = "update";
+
 int main(int argc, char *argv[])
 {
-    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1, .time = 0};
+    query_bits bits = { .format = NULL, .ep = NULL, .verbose = 0, .xml_filter = 0, .parse = 1, .time = 0, .operation = op_query};
 
     static char *optstring = "f:vnthp";
     char *query = NULL;
@@ -71,6 +76,12 @@ int main(int argc, char *argv[])
         { "pipe", 0, 0, 'p' },
         { 0, 0, 0, 0 }
     };
+
+    char *cmd = basename(argv[0]);
+    if (!strcmp(cmd, "sparql-update")) {
+        bits.operation = op_update;
+        bits.format = "text/plain";
+    }
 
     while ((c = getopt_long (argc, argv, optstring, long_options, &opt_index)) != -1) {
         if (c == 'f') {
@@ -99,14 +110,20 @@ int main(int argc, char *argv[])
     }
 
     if (help || !bits.ep) {
+        char *example;
+        if (bits.operation == op_update) {
+            example = "INSERT DATA { <s> <p> <o> }";
+        } else {
+            example = "SELECT * WHERE { ?s ?p ?o } LIMIT 10";
+        }
         fprintf(stderr, "%s revision %s\n", argv[0], GIT_REV);
-        fprintf(stderr, "Usage: %s [-v] [-n] [-t] [-p] [-f MIME type] <ep> [<query>] e.g.\n", argv[0]);
-        fprintf(stderr, " %s http://example.net/sparql 'SELECT * WHERE { ?s ?p ?o } LIMIT 10'\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-v] [-n] [-t] [-p] [-f MIME type] <ep> [<%s>] e.g.\n", cmd, bits.operation);
+        fprintf(stderr, " %s http://example.net/sparql '%s'\n", cmd, example);
         fprintf(stderr, " -n, --noparse  don't parse SPARQL XML results\n");
-        fprintf(stderr, " -t, --time     print execution time for each query\n");
-        fprintf(stderr, " -p, --pipe     read query from standard input and execute immediately\n");
+        fprintf(stderr, " -t, --time     print execution time for each %s\n", bits.operation);
+        fprintf(stderr, " -p, --pipe     read %s from standard input and execute immediately\n", bits.operation);
         fprintf(stderr, " <ep> is a SPARQL HTTP endpoint\n");
-        fprintf(stderr, " <query> is a SPARQL query to execute immediately in non-interactive mode\n");
+        fprintf(stderr, " <%s> is a SPARQL %s to execute immediately in non-interactive mode\n", bits.operation, bits.operation);
         fprintf(stderr, "remember to use shell quoting if necessary\n");
         return 1;
     }
@@ -134,7 +151,7 @@ int main(int argc, char *argv[])
 
     if (query) {
         sparql_curl_init(&bits);
-        CURLcode error = execute_query(query, &bits);
+        CURLcode error = execute_operation(query, &bits);
         return error;
     } else {
         interactive(&bits);
@@ -209,12 +226,21 @@ static size_t my_header_fn(void *ptr, size_t size, size_t nmemb, void *stream)
     return size * nmemb;
 }
 
-static int execute_query(const char *query, query_bits *bits)
+static int execute_operation(const char *query, query_bits *bits)
 {
     char my_curl_error[CURL_ERROR_SIZE];
-    char *encoded = curl_easy_escape (bits->curl, query, 0);
-    char *query_url = g_strdup_printf("%s?query=%s", bits->ep, encoded);
-    curl_free(encoded);
+    char *query_url;
+    if (bits->operation == op_query) {
+        char *encoded = curl_easy_escape (bits->curl, query, 0);
+        query_url = g_strdup_printf("%s?query=%s", bits->ep, encoded);
+        curl_free(encoded);
+    } else if (bits->operation == op_update) {
+        query_url = g_strdup(bits->ep);
+    } else {
+        printf("Unknown operation %s\n", bits->operation);
+
+        return 1;
+    }
 
     /* default to not filtering */
     bits->xml_filter = 0;
@@ -226,6 +252,13 @@ static int execute_query(const char *query, query_bits *bits)
     curl_easy_setopt(bits->curl, CURLOPT_HEADERDATA, bits);
     double then = 0.0, now = 0.0;
     if (bits->time) then = double_time();
+    if (bits->operation == op_update) {
+        curl_easy_setopt(bits->curl, CURLOPT_POST, 1);
+        char *encoded = curl_easy_escape (bits->curl, query, 0);
+        char *field = g_strdup_printf("update=%s", encoded);
+        curl_free(encoded);
+        curl_easy_setopt(bits->curl, CURLOPT_POSTFIELDS, field);
+    }
     CURLcode code = curl_easy_perform(bits->curl);
 
     if (code) {
@@ -332,7 +365,7 @@ static void interactive(query_bits *bits)
             query[strlen(query) - 2] = '\0';
         }
         if (query) {
-            execute_query(query, bits);
+            execute_operation(query, bits);
         }
     } while (query);
 

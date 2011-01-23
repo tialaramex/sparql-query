@@ -1,2 +1,3 @@
 *.o
 sparql-query
+sparql-update
