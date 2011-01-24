@@ -1,3 +1,4 @@
 *.o
 sparql-query
 sparql-update
+scan-test

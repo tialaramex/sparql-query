@@ -31,6 +31,8 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+#include "scan-sparql.h"
+
 extern int sr_parse(const char *filename);
 
 typedef struct query_bits_struct {
@@ -44,6 +46,7 @@ typedef struct query_bits_struct {
     int parse;  /* true if we want to parse results */
     int time; /* print execution time */
     const char *operation;
+    int auto_prefix; /* true if we want to add PREFIXes */
 } query_bits;
 
 /* must not be longer than 20 bytes, see above */
@@ -74,6 +77,7 @@ int main(int argc, char *argv[])
         { "time", 0, 0, 't' },
         { "help", 0, 0, 'h' },
         { "pipe", 0, 0, 'p' },
+        { "auto", 0, 0, 'a' },
         { 0, 0, 0, 0 }
     };
 
@@ -94,6 +98,8 @@ int main(int argc, char *argv[])
             bits.time = 1;
         } else if (c == 'p') {
             pipe = 1;
+        } else if (c == 'a') {
+            bits.auto_prefix = 1;
         } else {
             help = 1;
         }
@@ -122,6 +128,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, " -n, --noparse  don't parse SPARQL XML results\n");
         fprintf(stderr, " -t, --time     print execution time for each %s\n", bits.operation);
         fprintf(stderr, " -p, --pipe     read %s from standard input and execute immediately\n", bits.operation);
+        fprintf(stderr, " -a, --auto     automatically add PREFIXes if missing\n");
         fprintf(stderr, " <ep> is a SPARQL HTTP endpoint\n");
         fprintf(stderr, " <%s> is a SPARQL %s to execute immediately in non-interactive mode\n", bits.operation, bits.operation);
         fprintf(stderr, "remember to use shell quoting if necessary\n");
@@ -151,7 +158,13 @@ int main(int argc, char *argv[])
 
     if (query) {
         sparql_curl_init(&bits);
+        if (bits.auto_prefix) {
+            scan_init();
+        }
         CURLcode error = execute_operation(query, &bits);
+        if (bits.auto_prefix) {
+            scan_fini();
+        }
         return error;
     } else {
         interactive(&bits);
@@ -230,14 +243,32 @@ static int execute_operation(const char *query, query_bits *bits)
 {
     char my_curl_error[CURL_ERROR_SIZE];
     char *query_url;
+
+    char *executed_query = NULL;
+
+    if (bits->auto_prefix) {
+        char *suggestions = NULL;
+        scan_sparql(query, &suggestions);
+        if (strlen(suggestions)) {
+            executed_query = g_strjoin("", suggestions, query, NULL);
+            printf("Missing PREFIXes, adding:\n%s", suggestions);
+        } else {
+            executed_query = g_strdup(query);
+        }
+        g_free(suggestions);
+    } else {
+        executed_query = g_strdup(query);
+    }
+
     if (bits->operation == op_query) {
-        char *encoded = curl_easy_escape (bits->curl, query, 0);
+        char *encoded = curl_easy_escape (bits->curl, executed_query, 0);
         query_url = g_strdup_printf("%s?query=%s", bits->ep, encoded);
         curl_free(encoded);
     } else if (bits->operation == op_update) {
         query_url = g_strdup(bits->ep);
     } else {
         printf("Unknown operation %s\n", bits->operation);
+        g_free(executed_query);
 
         return 1;
     }
@@ -245,7 +276,6 @@ static int execute_operation(const char *query, query_bits *bits)
     /* default to not filtering */
     bits->xml_filter = 0;
     curl_easy_setopt(bits->curl, CURLOPT_WRITEDATA, stdout);
-
     curl_easy_setopt(bits->curl, CURLOPT_ERRORBUFFER, my_curl_error);
     curl_easy_setopt(bits->curl, CURLOPT_URL, query_url);
     curl_easy_setopt(bits->curl, CURLOPT_HEADERFUNCTION, my_header_fn);
@@ -254,7 +284,7 @@ static int execute_operation(const char *query, query_bits *bits)
     if (bits->time) then = double_time();
     if (bits->operation == op_update) {
         curl_easy_setopt(bits->curl, CURLOPT_POST, 1);
-        char *encoded = curl_easy_escape (bits->curl, query, 0);
+        char *encoded = curl_easy_escape (bits->curl, executed_query, 0);
         char *field = g_strdup_printf("update=%s", encoded);
         curl_free(encoded);
         curl_easy_setopt(bits->curl, CURLOPT_POSTFIELDS, field);
@@ -274,6 +304,7 @@ static int execute_operation(const char *query, query_bits *bits)
     if (bits->time) {
         fprintf(stderr, "Execution time: %.1fms\n", (now-then)*1000.0);
     }
+    g_free(executed_query);
 
     return code;
 }
@@ -315,6 +346,9 @@ static void interactive(query_bits *bits)
     const char *prompt = "sparql$ ";
     const char *reprompt = "      $ ";
 
+    scan_init();
+    bits->auto_prefix = 1;
+
     if (!isatty(0)) {
         /* no terminal input so disable TAB completion */
         rl_bind_key ('\t', rl_insert);
@@ -332,7 +366,7 @@ static void interactive(query_bits *bits)
     char *query = NULL;
 
     do {
-        printf("\n"); /* ensure a blank line */
+        //printf("\n"); /* ensure a blank line */
         /* assemble query string */
         char *line = readline(prompt);
         if (!line) break; /* EOF */
@@ -370,6 +404,8 @@ static void interactive(query_bits *bits)
     } while (query);
 
     save_history_dotfile();
+    scan_fini();
+
     return;
 }
 

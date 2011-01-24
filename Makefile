@@ -1,4 +1,5 @@
 BINS = sparql-query
+TESTS = scan-test
 LINKS = sparql-update
 REQUIRES = glib-2.0 libcurl libxml-2.0
 gitrev := $(shell git rev-parse --short HEAD)
@@ -18,7 +19,10 @@ install:
 	ln -s -f $(DESTDIR)/usr/local/bin/sparql-query $(DESTDIR)/usr/local/bin/sparql-update
 
 clean:
-	rm -f *.o $(BINS)
+	rm -f *.o $(BINS) $(LINKS) $(TESTS)
 
-sparql-query: sparql-query.o result-parse.o
+scan-test: scan-test.o scan-sparql.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+sparql-query: sparql-query.o result-parse.o scan-sparql.o
 	$(CC) $(LDFLAGS) -o $@ $^
