@@ -203,6 +203,8 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                     printf("%s\n", ctxt->aa.CR);
                 }
                 ctxt->state = STATE_RESULTS;
+            } else if (!strcmp(name, "boolean")) {
+                ctxt->state = STATE_BOOLEAN;
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format (missing results)\n");
                 /* stop parsing */
@@ -254,15 +256,6 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
             }
             break;
 
-        case STATE_SPARQL_WANT_BOOLEAN:
-            if (!strcmp(name, "boolean")) {
-                ctxt->state = STATE_BOOLEAN;
-            } else {
-                fprintf(stderr, "results not in valid SPARQL results format (missing boolean)\n");
-                /* stop parsing */
-            }
-            break;
-
         default:
             fprintf(stderr, "results not in valid SPARQL results format, unexpected <%s>\n", name);
             /* stop parsing */
@@ -304,11 +297,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                         printf("%s\n", ctxt->aa.V);
                     }
                 }
-                if (ctxt->cols > 0) {
-                    ctxt->state = STATE_SPARQL_WANT_RESULTS;
-                } else {
-                    ctxt->state = STATE_SPARQL_WANT_BOOLEAN;
-                }
+                ctxt->state = STATE_SPARQL_WANT_RESULTS;
             }
             break;
 
