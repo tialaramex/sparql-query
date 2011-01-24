@@ -355,18 +355,21 @@ static int check_endpoint(query_bits *bits)
 
 static void interactive(query_bits *bits)
 {
-    const char *prompt = "sparql$ ";
+    const char *prompt =   "sparql$ ";
     const char *reprompt = "      $ ";
 
     scan_init();
-    bits->auto_prefix = 1;
 
     if (!isatty(0)) {
         /* no terminal input so disable TAB completion */
         rl_bind_key ('\t', rl_insert);
         reprompt = prompt = "";
         bits->parse = 0;
+    } else {
+        using_history();
+        bits->auto_prefix = 1;
     }
+
     /* fill out readline functions */
     load_history_dotfile(bits);
 
@@ -378,7 +381,6 @@ static void interactive(query_bits *bits)
     char *query = NULL;
 
     do {
-        //printf("\n"); /* ensure a blank line */
         /* assemble query string */
         char *line = readline(prompt);
         if (!line) break; /* EOF */
