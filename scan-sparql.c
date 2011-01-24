@@ -23,9 +23,14 @@
 
 #define S_UNKNOWN "[unknown]"
 
+#define S_CONFIG_GROUP "prefixes"
+
 static GRegex *re_prefix = NULL, *re_qname = NULL;
 
 static GHashTable *lookup = NULL;
+
+static GKeyFile *keyfile = NULL;
+static char *keyfile_filename = NULL;
 
 int scan_init()
 {
@@ -53,6 +58,32 @@ int scan_init()
 
     lookup = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
+    if (!keyfile) {
+        keyfile = g_key_file_new();
+        keyfile_filename = g_strconcat(g_get_home_dir(), "/.sparql", NULL);
+    }
+    if (!g_key_file_load_from_file(keyfile, keyfile_filename, G_KEY_FILE_KEEP_COMMENTS, &err)) {
+        if (err->code != G_FILE_ERROR_NOENT) {
+            g_error("%s reading %s", err->message, keyfile_filename);
+
+            return 1;
+        }
+        g_error_free(err);
+        err = NULL;
+    } else {
+        char **keys = NULL;
+        keys = g_key_file_get_keys(keyfile, S_CONFIG_GROUP, NULL, &err);
+        if (keys) {
+            for (int i=0; keys[i]; i++) {
+                char *prefix = g_key_file_get_string(keyfile, S_CONFIG_GROUP, keys[i], &err);
+                if (prefix) {
+                    g_hash_table_insert(lookup, keys[i], prefix);
+                }
+            }
+            g_free(keys);
+        }
+    }
+
     return 0;
 }
 
@@ -69,6 +100,18 @@ void scan_fini()
     if (lookup) {
         g_hash_table_unref(lookup);
         lookup = NULL;
+    }
+
+    if (keyfile) {
+        GError *err = NULL;
+        gsize length = 0;
+        char *key_data = g_key_file_to_data(keyfile, &length, &err);
+        g_file_set_contents(keyfile_filename, key_data, length, &err);
+        g_key_file_free(keyfile);
+        keyfile = NULL;
+        g_free(key_data);
+        g_free(keyfile_filename);
+        keyfile_filename = NULL;
     }
 }
 
@@ -97,12 +140,14 @@ int scan_sparql(const char *str, char **prefixes)
         if (lprefix) {
             if (strcmp(prefix, lprefix)) {
                 g_hash_table_replace(lookup, sname, prefix);
+                g_key_file_set_string(keyfile, S_CONFIG_GROUP, sname, prefix);
             } else {
                 g_free(sname);
                 g_free(prefix);
             }
         } else {
             g_hash_table_insert(lookup, sname, prefix);
+            g_key_file_set_string(keyfile, S_CONFIG_GROUP, sname, prefix);
         }
         g_match_info_next(match_info, NULL);
     }
@@ -153,6 +198,7 @@ int scan_sparql(const char *str, char **prefixes)
                         g_free(old_prefixes);
                         defined = g_slist_prepend(defined, g_strdup(sname));
                         g_hash_table_insert(lookup, g_strdup(sname), g_strdup(q));
+                        g_key_file_set_string(keyfile, S_CONFIG_GROUP, sname, q);
                     } else {
                         g_hash_table_insert(lookup, g_strdup(sname), g_strdup(S_UNKNOWN));
                     }

@@ -135,6 +135,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    atexit(scan_fini);
+
     if (!bits.format) {
         bits.format = "application/sparql-results+xml";
     }
@@ -162,9 +164,7 @@ int main(int argc, char *argv[])
             scan_init();
         }
         CURLcode error = execute_operation(query, &bits);
-        if (bits.auto_prefix) {
-            scan_fini();
-        }
+
         return error;
     } else {
         interactive(&bits);
@@ -186,16 +186,28 @@ static double double_time()
     return (double)now.tv_sec + (now.tv_usec * 0.000001);
 }
 
-static void load_history_dotfile(void)
+static char *history_filename(query_bits *bits)
 {
-    char *dotfile = g_strconcat(g_get_home_dir(), "/.sparql_history", NULL);
+    char *dotfile;
+    if (bits->operation == op_query) {
+        dotfile = g_strconcat(g_get_home_dir(), "/.sparql_history", NULL);
+    } else {
+        dotfile = g_strconcat(g_get_home_dir(), "/.sparql_uhistory", NULL);
+    }
+
+    return dotfile;
+}
+
+static void load_history_dotfile(query_bits *bits)
+{
+    char *dotfile = history_filename(bits);
     read_history(dotfile);
     g_free(dotfile);
 }
 
-static void save_history_dotfile(void)
+static void save_history_dotfile(query_bits *bits)
 {
-    char *dotfile = g_strconcat(g_get_home_dir(), "/.sparql_history", NULL);
+    char *dotfile = history_filename(bits);
     stifle_history(100); /* arbitrarily restrict history file to 100 entries */
     write_history(dotfile);
     g_free(dotfile);
@@ -356,7 +368,7 @@ static void interactive(query_bits *bits)
         bits->parse = 0;
     }
     /* fill out readline functions */
-    load_history_dotfile();
+    load_history_dotfile(bits);
 
     sparql_curl_init(bits);
     if (check_endpoint(bits)) {
@@ -403,8 +415,7 @@ static void interactive(query_bits *bits)
         }
     } while (query);
 
-    save_history_dotfile();
-    scan_fini();
+    save_history_dotfile(bits);
 
     return;
 }
