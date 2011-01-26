@@ -63,8 +63,10 @@ int scan_init()
         keyfile_filename = g_strconcat(g_get_home_dir(), "/.sparql", NULL);
     }
     if (!g_key_file_load_from_file(keyfile, keyfile_filename, G_KEY_FILE_KEEP_COMMENTS, &err)) {
-        if (err->code != G_FILE_ERROR_NOENT) {
-            g_error("%s reading %s", err->message, keyfile_filename);
+        if (err->code != G_FILE_ERROR_NOENT &&
+            err->code != G_FILE_ERROR_EXIST &&
+            err->code != G_FILE_ERROR_ISDIR) {
+            g_error("%s(%d) reading %s", err->message, err->code, keyfile_filename);
 
             return 1;
         }
