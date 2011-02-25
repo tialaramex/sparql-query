@@ -33,7 +33,7 @@
 
 #include "scan-sparql.h"
 
-extern int sr_parse(const char *filename);
+extern int sr_parse(const char *filename, const char *format);
 
 typedef struct query_bits_struct {
     char *format;
@@ -217,7 +217,7 @@ static void sparql_curl_init(query_bits *bits)
 {
     bits->curl = curl_easy_init();
     struct curl_slist *headers = NULL;
-    char *accept = g_strdup_printf("Accept: %s", bits->format);
+    char *accept = g_strdup_printf("Accept: %s, application/sparql-results+xml", bits->format);
     headers = curl_slist_append(headers, accept);
     g_free(accept);
 
@@ -239,7 +239,7 @@ static size_t my_header_fn(void *ptr, size_t size, size_t nmemb, void *stream)
         /* content type */
         char *type = (char *) ptr + sizeof(content_type);
         size_t len = (size * nmemb) - sizeof(content_type);
-        if (bits->parse == 1 && len > strlen(sparql) && !strncmp(type, sparql, strlen(bits->format))) {
+        if (bits->parse == 1 && len > strlen(sparql) && !strncmp(type, sparql, strlen(sparql))) {
             bits->xml_filter = 1;
             strcpy(bits->filename, tmp_filename);
             int fd = mkstemp(bits->filename);
@@ -309,7 +309,7 @@ static int execute_operation(const char *query, query_bits *bits)
     if (bits->time) now = double_time();
     if (bits->xml_filter) {
         fclose(bits->file);
-        sr_parse(bits->filename);
+        sr_parse(bits->filename, bits->format);
         unlink(bits->filename);
         bits->xml_filter = 0;
     }

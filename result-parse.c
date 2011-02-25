@@ -83,6 +83,7 @@ typedef struct _xmlctxt {
     struct aa_chars aa;
     GSList *name_list;
     int current_col;
+    int tsv;
 } xmlctxt;
 
 static int name_to_col(xmlctxt *ctxt, const char *name)
@@ -132,17 +133,19 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                 if (ctxt->pass == 0) {
                     /* do nothing */
                 } else {
-                    for (int i=0; i<MAX(ctxt->cols, 1); i++) {
-                        if (i == 0) {
-                            printf("%s%s%s", ctxt->aa.TL, ctxt->aa.H, ctxt->aa.H);
-                        } else {
-                            printf("%s%s%s", ctxt->aa.TC, ctxt->aa.H, ctxt->aa.H);
+                    if (!ctxt->tsv) {
+                        for (int i=0; i<MAX(ctxt->cols, 1); i++) {
+                            if (i == 0) {
+                                printf("%s%s%s", ctxt->aa.TL, ctxt->aa.H, ctxt->aa.H);
+                            } else {
+                                printf("%s%s%s", ctxt->aa.TC, ctxt->aa.H, ctxt->aa.H);
+                            }
+                            for (int j=0; j<ctxt->widths[i]; j++) {
+                                printf("%s", ctxt->aa.H);
+                            }
                         }
-                        for (int j=0; j<ctxt->widths[i]; j++) {
-                            printf("%s", ctxt->aa.H);
-                        }
+                        printf("%s\n", ctxt->aa.TR);
                     }
-                    printf("%s\n", ctxt->aa.TR);
                 }
                 ctxt->state = STATE_HEAD;
                 ctxt->col = 0;
@@ -166,7 +169,11 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                         (ctxt->cols)++;
                     } else {
                         if (!strcmp(key, "name")) {
-                            printf("%s ?%*s ", ctxt->aa.V, -ctxt->widths[ctxt->col] + 1, value);
+                            if (ctxt->tsv) {
+                                printf("%s?%s", ctxt->col>0 ? ctxt->aa.V : "", value);
+                            } else {
+                                printf("%s ?%*s ", ctxt->aa.V, -ctxt->widths[ctxt->col] + 1, value);
+                            }
                             (ctxt->col)++;
                         }
                     }
@@ -286,14 +293,16 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                         ctxt->names[k] = nlist->data;
                         nlist = nlist->next;
                         ctxt->row[k] = (char *)nullstr;
-                        if (k < TMP_COLS) {
+                        if (ctxt->tsv) {
+                            ctxt->widths[k] = 0;
+                        } else if (k < TMP_COLS) {
                             ctxt->widths[k] = ctxt->tmp_widths[k];
                         } else {
                             ctxt->widths[k] = 2;
                         }
                     }
                 } else {
-                    if (ctxt->cols > 0) {
+                    if (ctxt->cols > 0 && !ctxt->tsv) {
                         printf("%s\n", ctxt->aa.V);
                     }
                 }
@@ -310,9 +319,9 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                 ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->col]);
                 ctxt->state = STATE_RESULTS_DONE;
             } else {
-                printf("%s %*s %s\n", ctxt->aa.V, -ctxt->widths[ctxt->col], ctxt->text, ctxt->aa.V);
+                printf("%s%s%*s%s%s\n", ctxt->aa.V, ctxt->tsv ? "" : " ", -ctxt->widths[ctxt->col], ctxt->text, ctxt->tsv ? "" : " ", ctxt->aa.V);
                 printf("%s", ctxt->aa.BL);
-                for (int i=0; i<ctxt->widths[ctxt->col] + 2; i++) {
+                for (int i=0; !ctxt->tsv && i<ctxt->widths[ctxt->col] + ctxt->tsv ? 0 : 2; i++) {
                     printf("%s", ctxt->aa.H);
                 }
                 printf("%s\n", ctxt->aa.BR);
@@ -378,7 +387,11 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                 } else {
                     /* print the reuslt row */
                     for (int i=0; i<ctxt->cols; i++) {
-                        printf("%s %s%*s ", ctxt->aa.V, ctxt->row[i], -ctxt->widths[i] + (int)safe_strlen(ctxt->row[i]), "");
+                        if (ctxt->tsv) {
+                            printf("%s%s", i>0 ? ctxt->aa.V : "", ctxt->row[i]);
+                        } else {
+                            printf("%s %s%*s ", ctxt->aa.V, ctxt->row[i], -ctxt->widths[i] + (int)safe_strlen(ctxt->row[i]), "");
+                        }
                         if (ctxt->row[i] != nullstr) {
                             g_free(ctxt->row[i]);
                             ctxt->row[i] = (char *)nullstr;
@@ -398,17 +411,19 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                 if (ctxt->pass == 0) {
                     /* do nothing */
                 } else {
-                    for (int i=0; i<ctxt->cols; i++) {
-                        if (i == 0) {
-                            printf("%s%s%s", ctxt->aa.BL, ctxt->aa.H, ctxt->aa.H);
-                        } else {
-                            printf("%s%s%s", ctxt->aa.BC, ctxt->aa.H, ctxt->aa.H);
+                    if (!ctxt->tsv) {
+                        for (int i=0; i<ctxt->cols; i++) {
+                            if (i == 0) {
+                                printf("%s%s%s", ctxt->aa.BL, ctxt->aa.H, ctxt->aa.H);
+                            } else {
+                                printf("%s%s%s", ctxt->aa.BC, ctxt->aa.H, ctxt->aa.H);
+                            }
+                            for (int j=0; j<ctxt->widths[i]; j++) {
+                                printf("%s", ctxt->aa.H);
+                            }
                         }
-                        for (int j=0; j<ctxt->widths[i]; j++) {
-                            printf("%s", ctxt->aa.H);
-                        }
+                        printf("%s\n", ctxt->aa.BR);
                     }
-                    printf("%s\n", ctxt->aa.BR);
                 }
             } else {
                 fprintf(stderr, "results not in valid SPARQL results format, unexpected </%s> after results\n", name);
@@ -453,12 +468,27 @@ static xmlSAXHandler sax = {
     .characters = xml_characters,
 };
 
-int sr_parse(const char *filename)
+int sr_parse(const char *filename, const char *format)
 {
     xmlctxt *ctxt = g_new0(xmlctxt, 1);
     setlocale(LC_ALL, "");
     int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
-    if (utf8_mode) {
+    /* if we asked for TSV */
+    if (!strncmp(format, "text/tab-separated-values", 25) ||
+        !strncmp(format, "text/plain", 10)) {
+        ctxt->tsv = 1;
+        ctxt->aa.H = "";
+        ctxt->aa.V = "	";
+        ctxt->aa.TL = "";
+        ctxt->aa.TC = "";
+        ctxt->aa.TR = "";
+        ctxt->aa.CL = "";
+        ctxt->aa.CC = "";
+        ctxt->aa.CR = "";
+        ctxt->aa.BL = "";
+        ctxt->aa.BC = "";
+        ctxt->aa.BR = "";
+    } else if (utf8_mode) {
         ctxt->aa.H = "─";
         ctxt->aa.V = "│";
         ctxt->aa.TL = "┌";
