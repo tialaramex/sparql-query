@@ -79,7 +79,7 @@ int scan_init()
             for (int i=0; keys[i]; i++) {
                 char *prefix = g_key_file_get_string(keyfile, S_CONFIG_GROUP, keys[i], &err);
                 if (prefix) {
-                    g_hash_table_insert(lookup, keys[i], prefix);
+                    g_hash_table_insert(lookup, g_strdup(keys[i]), g_strdup(prefix));
                 }
             }
             g_free(keys);
@@ -137,18 +137,17 @@ int scan_sparql(const char *str, char **prefixes)
         gchar *prefix = g_match_info_fetch(match_info, 2);
 
         defined = g_slist_prepend(defined, sname);
-        g_print ("  Found: %s -> %s\n", sname, prefix);
         char *lprefix = g_hash_table_lookup(lookup, sname);
         if (lprefix) {
             if (strcmp(prefix, lprefix)) {
-                g_hash_table_replace(lookup, sname, prefix);
+                g_hash_table_replace(lookup, sname, g_strdup(prefix));
                 g_key_file_set_string(keyfile, S_CONFIG_GROUP, sname, prefix);
             } else {
                 g_free(sname);
                 g_free(prefix);
             }
         } else {
-            g_hash_table_insert(lookup, sname, prefix);
+            g_hash_table_insert(lookup, g_strdup(sname), g_strdup(prefix));
             g_key_file_set_string(keyfile, S_CONFIG_GROUP, sname, prefix);
         }
         g_match_info_next(match_info, NULL);

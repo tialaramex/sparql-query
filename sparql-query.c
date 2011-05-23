@@ -232,7 +232,7 @@ static size_t my_header_fn(void *ptr, size_t size, size_t nmemb, void *stream)
 {
     query_bits *bits = (query_bits *) stream;
 
-    const char content_type[] = "Content-Type:";
+    const char content_type[] = "Content-Type: ";
     const char *sparql = "application/sparql-results+xml";
 
     if (size * nmemb > sizeof(content_type) && !strncasecmp((char *) ptr, content_type, sizeof(content_type) - 1)) {
