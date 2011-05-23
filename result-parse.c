@@ -19,14 +19,13 @@
 #include <string.h>
 #include <locale.h>
 #include <langinfo.h>
-#include <libxml/parser.h>
 #include <glib.h>
-
-/* protect us from Linux's lame strlen */
-#define safe_strlen(_s) ((_s) ? strlen(_s) : 0)
+#include <libxml/parser.h>
 
 /* number of columns names to record widths for in 1st pass */
 #define TMP_COLS 32
+
+int sr_utf8_column_width(const char *str);
 
 static const char *nullstr = "";
 
@@ -163,7 +162,7 @@ static void xml_start_element(void *user_data, const xmlChar *xml_name, const xm
                     const char *value = (const char *) *(attrs++);
                     if (ctxt->pass == 0) {
                         if (ctxt->cols < TMP_COLS) {
-                            ctxt->tmp_widths[ctxt->cols] = strlen(value) + 1;
+                            ctxt->tmp_widths[ctxt->cols] = g_utf8_strlen(value, -1) + 1;
                         }
                         ctxt->name_list = g_slist_append(ctxt->name_list, g_strdup(value));
                         (ctxt->cols)++;
@@ -316,7 +315,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
 
         case STATE_BOOLEAN:
             if (ctxt->pass == 0) {
-                ctxt->widths[ctxt->col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->col]);
+                ctxt->widths[ctxt->col] = MAX(sr_utf8_column_width(ctxt->text), ctxt->widths[ctxt->col]);
                 ctxt->state = STATE_RESULTS_DONE;
             } else {
                 printf("%s%s%*s%s%s\n", ctxt->aa.V, ctxt->tsv ? "" : " ", -ctxt->widths[ctxt->col], ctxt->text, ctxt->tsv ? "" : " ", ctxt->aa.V);
@@ -335,7 +334,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
             if (!strcmp(name, "uri")) {
                 if (ctxt->pass == 0) {
                     if (ctxt->widths) {
-                        ctxt->widths[ctxt->current_col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->current_col]);
+                        ctxt->widths[ctxt->current_col] = MAX(sr_utf8_column_width(ctxt->text) + 2, ctxt->widths[ctxt->current_col]);
                     }
                 } else {
                     ctxt->row[ctxt->current_col] = g_strdup_printf("<%s>", ctxt->text);
@@ -349,7 +348,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_LITERAL:
             if (!strcmp(name, "literal")) {
                 if (ctxt->pass == 0) {
-                    ctxt->widths[ctxt->current_col] = MAX(safe_strlen(ctxt->text), ctxt->widths[ctxt->current_col]);
+                    ctxt->widths[ctxt->current_col] = MAX(sr_utf8_column_width(ctxt->text), ctxt->widths[ctxt->current_col]);
                 } else {
                     ctxt->row[ctxt->current_col] = g_strdup_printf("%s", ctxt->text ? ctxt->text : "");
                 }
@@ -362,7 +361,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
         case STATE_BNODE:
             if (!strcmp(name, "bnode")) {
                 if (ctxt->pass == 0) {
-                    ctxt->widths[ctxt->current_col] = MAX(safe_strlen(ctxt->text) + 2, ctxt->widths[ctxt->current_col]);
+                    ctxt->widths[ctxt->current_col] = MAX(sr_utf8_column_width(ctxt->text) + 2, ctxt->widths[ctxt->current_col]);
                 } else {
                     ctxt->row[ctxt->current_col] = g_strdup_printf("_:%s", ctxt->text ? ctxt->text : "");
                 }
@@ -390,7 +389,7 @@ static void xml_end_element(void *user_data, const xmlChar *xml_name)
                         if (ctxt->tsv) {
                             printf("%s%s", i>0 ? ctxt->aa.V : "", ctxt->row[i]);
                         } else {
-                            printf("%s %s%*s ", ctxt->aa.V, ctxt->row[i], -ctxt->widths[i] + (int)safe_strlen(ctxt->row[i]), "");
+                            printf("%s %s%*s ", ctxt->aa.V, ctxt->row[i], -ctxt->widths[i] + (int)sr_utf8_column_width(ctxt->row[i]), "");
                         }
                         if (ctxt->row[i] != nullstr) {
                             g_free(ctxt->row[i]);
@@ -523,6 +522,28 @@ int sr_parse(const char *filename, const char *format)
     g_free(ctxt);
 
     return 0;
+}
+
+int sr_utf8_column_width(const char *str)
+{
+    if (!str) {
+        return 0;
+    }
+
+    gunichar *gustr = g_utf8_to_ucs4_fast(str, -1, NULL);
+    int width = 0;
+    for (gunichar *pos = gustr; *pos; pos++) {
+        if (g_unichar_iswide(*pos)) {
+            width += 2;
+        } else if (g_unichar_iszerowidth(*pos)) {
+            /* do nothing */
+        } else {
+            width++;
+        }
+    }
+    g_free(gustr);
+
+    return width;
 }
 
 /* vi:set expandtab sts=4 sw=4: */
