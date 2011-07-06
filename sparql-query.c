@@ -217,7 +217,12 @@ static void sparql_curl_init(query_bits *bits)
 {
     bits->curl = curl_easy_init();
     struct curl_slist *headers = NULL;
-    char *accept = g_strdup_printf("Accept: %s, application/sparql-results+xml", bits->format);
+    char *accept;
+    if (bits->parse) {
+        accept = g_strdup_printf("Accept: %s, application/sparql-results+xml", bits->format);
+    } else {
+        accept = g_strdup_printf("Accept: %s", bits->format);
+    }
     headers = curl_slist_append(headers, accept);
     g_free(accept);
 
