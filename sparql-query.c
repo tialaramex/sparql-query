@@ -279,7 +279,11 @@ static int execute_operation(const char *query, query_bits *bits)
 
     if (bits->operation == op_query) {
         char *encoded = curl_easy_escape (bits->curl, executed_query, 0);
-        query_url = g_strdup_printf("%s?query=%s", bits->ep, encoded);
+        if (strchr(bits->ep, '?')) {
+            query_url = g_strdup_printf("%s&query=%s", bits->ep, encoded);
+        } else {
+            query_url = g_strdup_printf("%s?query=%s", bits->ep, encoded);
+        }
         curl_free(encoded);
     } else if (bits->operation == op_update) {
         query_url = g_strdup(bits->ep);
