@@ -136,15 +136,12 @@ int scan_sparql(const char *str, char **prefixes)
         gchar *sname = g_match_info_fetch(match_info, 1);
         gchar *prefix = g_match_info_fetch(match_info, 2);
 
-        defined = g_slist_prepend(defined, sname);
+        defined = g_slist_prepend(defined, g_strdup(sname));
         char *lprefix = g_hash_table_lookup(lookup, sname);
         if (lprefix) {
             if (strcmp(prefix, lprefix)) {
                 g_hash_table_replace(lookup, sname, g_strdup(prefix));
                 g_key_file_set_string(keyfile, S_CONFIG_GROUP, sname, prefix);
-            } else {
-                g_free(sname);
-                g_free(prefix);
             }
         } else {
             g_hash_table_insert(lookup, g_strdup(sname), g_strdup(prefix));
