@@ -22,7 +22,7 @@ clean:
 	rm -f *.o $(BINS) $(LINKS) $(TESTS)
 
 scan-test: scan-test.o scan-sparql.o
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) -o $@ $^ $(LDFLAGS)
 
 sparql-query: sparql-query.o result-parse.o scan-sparql.o
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) -o $@ $^ $(LDFLAGS)
