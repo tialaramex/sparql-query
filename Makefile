@@ -1,4 +1,4 @@
-BINS = sparql-query
+BINS = sparql-query sparql-update
 TESTS = scan-test
 LINKS = sparql-update
 REQUIRES = glib-2.0 libcurl libxml-2.0
@@ -13,7 +13,7 @@ all: $(BINS) $(LINKS)
 sparql-update:
 	ln -s sparql-query sparql-update
 
-install:
+install: all
 	mkdir -p $(DESTDIR)/usr/local/bin/
 	install $(BINS) $(DESTDIR)/usr/local/bin/
 	ln -s -f $(DESTDIR)/usr/local/bin/sparql-query $(DESTDIR)/usr/local/bin/sparql-update
